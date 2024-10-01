@@ -324,3 +324,106 @@ bash
 Copy code
 rails server
 
+
+
+
+
+
+
+
+
+
+
+
+1. Generate Devise Views
+First, generate the Devise views if you haven't done so already. This will allow you to modify the default views that Devise provides, including the sign-up form.
+
+bash
+Copy code
+rails generate devise:views
+This will create the views for Devise inside app/views/devise.
+
+2. Customize the Sign-up Form
+The sign-up form is located at app/views/devise/registrations/new.html.erb. You can customize this view to include the additional fields (first name, last name, username, and role).
+
+Here’s an example of a customized sign-up form that includes those fields:
+
+erb
+Copy code
+<h2>Sign up</h2>
+
+<%= form_for(resource, as: resource_name, url: registration_path(resource_name)) do |f| %>
+  <%= devise_error_messages! %>
+
+  <div class="field">
+    <%= f.label :first_name %><br />
+    <%= f.text_field :first_name, autofocus: true, autocomplete: "first_name" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :last_name %><br />
+    <%= f.text_field :last_name, autocomplete: "last_name" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :username %><br />
+    <%= f.text_field :username, autocomplete: "username" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :role %><br />
+    <%= f.select :role, User::ROLES.map { |role| [role.humanize, role] }, {}, class: "form-select" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :email %><br />
+    <%= f.email_field :email, autocomplete: "email" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :password %>
+    <% if @minimum_password_length %>
+      <em>(<%= @minimum_password_length %> characters minimum)</em>
+    <% end %><br />
+    <%= f.password_field :password, autocomplete: "new-password" %>
+  </div>
+
+  <div class="field">
+    <%= f.label :password_confirmation %><br />
+    <%= f.password_field :password_confirmation, autocomplete: "new-password" %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit "Sign up" %>
+  </div>
+<% end %>
+
+<%= render "devise/shared/links" %>
+Explanation:
+First Name, Last Name, Username, Role: These fields are now part of the sign-up form. We added first_name, last_name, username, and role inputs, where the role is presented as a dropdown select box.
+Role Selection: f.select :role, User::ROLES.map { |role| [role.humanize, role] } is used to create a dropdown list where the user can select their role (admin, project_manager, or user). This uses the predefined ROLES array from your User model.
+3. Permit the New Fields in Devise (Strong Parameters)
+As mentioned earlier, ensure that you've added the necessary strong parameters in your ApplicationController to permit these fields:
+
+ruby
+Copy code
+class ApplicationController < ActionController::Base
+  before_action :configure_permitted_parameters, if: :devise_controller?
+
+  protected
+
+  def configure_permitted_parameters
+    devise_parameter_sanitizer.permit(:sign_up, keys: [:first_name, :last_name, :username, :role])
+    devise_parameter_sanitizer.permit(:account_update, keys: [:first_name, :last_name, :username, :role])
+  end
+end
+4. Style the Form (Optional)
+If you’re using Bootstrap or any other CSS framework, you can add classes to your form fields and buttons for better styling. For example, with Bootstrap:
+
+erb
+Copy code
+<%= f.text_field :first_name, class: 'form-control', autofocus: true, autocomplete: "first_name" %>
+5. Test the Sign-up Flow
+Now, when you visit /users/sign_up, you should see a customized form with fields for the user's first name, last name, username, and role. After filling out the form and signing up, the user should be created with all the extra attributes saved in the database.
+
+This form will also apply the role-based access control once users log in, as we set up previously.
