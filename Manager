@@ -1,0 +1,231 @@
+1. Generate the Project Model and Controller
+First, generate the Project model, controller, and the migration:
+
+bash
+Copy code
+rails generate model Project name:string description:text project_manager:references
+rails generate controller Projects new create edit update index show
+Then, migrate the database:
+
+bash
+Copy code
+rails db:migrate
+2. Set up Role-based Access Control
+In the ProjectsController, restrict access so that Project Managers can only manage their own projects and Admin can manage all projects:
+
+In app/controllers/projects_controller.rb:
+
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :project_manager_only, only: [:new, :create, :edit, :update, :assign]
+  before_action :set_project, only: [:show, :edit, :update, :destroy, :assign]
+  before_action :authorize_project_manager!, only: [:edit, :update, :destroy, :assign]
+
+  # List all projects (Admin can see all, Project Managers see only their own projects)
+  def index
+    if current_user.admin?
+      @projects = Project.all
+    elsif current_user.project_manager?
+      @projects = Project.where(project_manager_id: current_user.id)
+    end
+  end
+
+  # Show a single project
+  def show
+  end
+
+  # Create a new project (for project managers only)
+  def new
+    @project = Project.new
+  end
+
+  # Save a new project
+  def create
+    @project = current_user.managed_projects.build(project_params)
+    if @project.save
+      redirect_to @project, notice: "Project created successfully."
+    else
+      render :new, alert: "Unable to create project."
+    end
+  end
+
+  # Edit a project
+  def edit
+  end
+
+  # Update a project
+  def update
+    if @project.update(project_params)
+      redirect_to @project, notice: "Project updated successfully."
+    else
+      render :edit, alert: "Unable to update project."
+    end
+  end
+
+  # Assign users to a project
+  def assign
+    @users = User.where(role: 'user')
+  end
+
+  # Delete a project (optional)
+  def destroy
+    @project.destroy
+    redirect_to projects_path, notice: "Project deleted successfully."
+  end
+
+  private
+
+  # Strong parameters for project creation
+  def project_params
+    params.require(:project).permit(:name, :description)
+  end
+
+  # Ensure only project managers can create and edit their projects
+  def project_manager_only
+    redirect_to root_path, alert: "Access denied." unless current_user.project_manager? || current_user.admin?
+  end
+
+  # Find project for edit/update
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  # Ensure a project manager can only edit their own project
+  def authorize_project_manager!
+    redirect_to root_path, alert: "Access denied." unless current_user.admin? || @project.project_manager_id == current_user.id
+  end
+end
+3. Create Views for Projects
+app/views/projects/index.html.erb (List all projects):
+erb
+Copy code
+<h1>Projects</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @projects.each do |project| %>
+      <tr>
+        <td><%= project.name %></td>
+        <td><%= project.description %></td>
+        <td>
+          <%= link_to 'View', project_path(project), class: "btn btn-primary" %>
+          <%= link_to 'Edit', edit_project_path(project), class: "btn btn-secondary" if current_user.admin? || project.project_manager_id == current_user.id %>
+          <%= link_to 'Assign Users', assign_project_path(project), class: "btn btn-warning" if current_user.admin? || project.project_manager_id == current_user.id %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+app/views/projects/new.html.erb (Create new project):
+erb
+Copy code
+<h1>Create New Project</h1>
+
+<%= form_for @project do |f| %>
+  <div class="field">
+    <%= f.label :name %>
+    <%= f.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :description %>
+    <%= f.text_area :description %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit "Create Project", class: "btn btn-success" %>
+  </div>
+<% end %>
+
+<%= link_to 'Back to Projects', projects_path, class: "btn btn-secondary" %>
+app/views/projects/assign.html.erb (Assign users to the project):
+erb
+Copy code
+<h1>Assign Users to Project</h1>
+
+<%= form_with url: assign_project_path(@project), method: :patch do |f| %>
+  <div class="field">
+    <%= label_tag :user_ids, "Select Users" %><br>
+    <%= collection_check_boxes(:project, :user_ids, @users, :id, :full_name) %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit "Assign Users", class: "btn btn-success" %>
+  </div>
+<% end %>
+4. Set Up Relationships Between Projects and Users
+You need to establish the relationships between projects and users. Modify your User and Project models accordingly.
+
+In app/models/user.rb:
+ruby
+Copy code
+class User < ApplicationRecord
+  has_many :managed_projects, class_name: "Project", foreign_key: "project_manager_id"
+  has_and_belongs_to_many :projects
+
+  def full_name
+    "#{first_name} #{last_name}"
+  end
+end
+In app/models/project.rb:
+ruby
+Copy code
+class Project < ApplicationRecord
+  belongs_to :project_manager, class_name: 'User', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :users
+
+  validates :name, :description, presence: true
+end
+5. Create a Join Table for Users and Projects
+You need a join table to assign users to projects. Run the migration for this:
+
+bash
+Copy code
+rails generate migration CreateJoinTableUsersProjects users projects
+rails db:migrate
+This migration will create a users_projects table that connects users with projects.
+
+6. Add Routes for Project Management
+In your config/routes.rb, add routes for managing projects and assigning users:
+
+ruby
+Copy code
+resources :projects do
+  member do
+    get 'assign'
+    patch 'assign', to: 'projects#assign_users'
+  end
+end
+7. Implement the assign_users Action in the ProjectsController
+Finally, you need to implement the logic to assign users to projects:
+
+In app/controllers/projects_controller.rb:
+
+ruby
+Copy code
+# Assign users to the project
+def assign_users
+  @project = Project.find(params[:id])
+  @project.user_ids = params[:project][:user_ids]
+  if @project.save
+    redirect_to @project, notice: "Users assigned successfully."
+  else
+    redirect_to assign_project_path(@project), alert: "Failed to assign users."
+  end
+end
+Conclusion
+Now the Project Manager can:
+
+Create projects and manage them.
+Assign users to those projects.
+Admins have full control over all projects and users, while project managers can only manage their own projects.
+This approach ensures role-based access control where project managers handle project management, and users are assigned to their respective projects.
