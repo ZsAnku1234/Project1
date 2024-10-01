@@ -1,0 +1,197 @@
+. Configure Devise to Permit Additional Fields
+To allow Devise to accept the additional fields during sign-up, update the ApplicationController with strong parameters:
+
+ruby
+Copy code
+class ApplicationController < ActionController::Base
+  before_action :configure_permitted_parameters, if: :devise_controller?
+
+  protected
+
+  def configure_permitted_parameters
+    devise_parameter_sanitizer.permit(:sign_up, keys: [:first_name, :last_name, :username, :role])
+    devise_parameter_sanitizer.permit(:account_update, keys: [:first_name, :last_name, :username, :role])
+  end
+end
+5. Set up Role-Based Access Control
+We'll use the before_action method in the ApplicationController to restrict access based on roles:
+
+ruby
+Copy code
+class ApplicationController < ActionController::Base
+  before_action :authenticate_user!
+
+  def after_sign_in_path_for(resource)
+    case current_user.role
+    when 'admin'
+      admin_dashboard_path
+    when 'project_manager'
+      project_manager_dashboard_path
+    else
+      user_dashboard_path
+    end
+  end
+end
+6. Create Admin, Project Manager, and User Dashboards
+Generate controllers and views for each role:
+
+bash
+Copy code
+rails generate controller AdminDashboard index
+rails generate controller ProjectManagerDashboard index
+rails generate controller UserDashboard index
+In each controller, you can restrict access by role:
+
+For AdminDashboard:
+
+ruby
+Copy code
+class AdminDashboardController < ApplicationController
+  before_action :admin_only
+
+  def index
+    @users = User.all
+  end
+
+  private
+
+  def admin_only
+    redirect_to(root_path, alert: "Access denied.") unless current_user.admin?
+  end
+end
+For ProjectManagerDashboard:
+
+ruby
+Copy code
+class ProjectManagerDashboardController < ApplicationController
+  before_action :project_manager_only
+
+  def index
+    @projects = Project.all
+  end
+
+  private
+
+  def project_manager_only
+    redirect_to(root_path, alert: "Access denied.") unless current_user.project_manager?
+  end
+end
+For UserDashboard:
+
+ruby
+Copy code
+class UserDashboardController < ApplicationController
+  def index
+    @projects = Project.all
+  end
+end
+7. Admin User Management
+The Admin should be able to manage users and assign roles. You can generate a controller and views for User management:
+
+bash
+Copy code
+rails generate controller Users
+In UsersController, allow the admin to update user roles:
+
+ruby
+Copy code
+class UsersController < ApplicationController
+  before_action :admin_only
+
+  def index
+    @users = User.all
+  end
+
+  def edit
+    @user = User.find(params[:id])
+  end
+
+  def update
+    @user = User.find(params[:id])
+    if @user.update(user_params)
+      redirect_to users_path, notice: 'User role updated successfully.'
+    else
+      render :edit
+    end
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:first_name, :last_name, :username, :role)
+  end
+
+  def admin_only
+    redirect_to(root_path, alert: "Access denied.") unless current_user.admin?
+  end
+end
+8. Project Management for Project Managers
+Generate a Project model:
+
+bash
+Copy code
+rails generate scaffold Project name:string description:text user:references
+In the ProjectsController, restrict project creation to Project Managers:
+
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :project_manager_only, only: [:new, :create]
+
+  def index
+    @projects = Project.all
+  end
+
+  def new
+    @project = Project.new
+  end
+
+  def create
+    @project = current_user.projects.build(project_params)
+    if @project.save
+      redirect_to projects_path, notice: 'Project created successfully.'
+    else
+      render :new
+    end
+  end
+
+  private
+
+  def project_params
+    params.require(:project).permit(:name, :description)
+  end
+
+  def project_manager_only
+    redirect_to(root_path, alert: "Access denied.") unless current_user.project_manager?
+  end
+end
+9. Views and Routes
+Update the routes to define the paths for each dashboard:
+
+ruby
+Copy code
+Rails.application.routes.draw do
+  devise_for :users
+  resources :users, only: [:index, :edit, :update]
+  resources :projects
+
+  authenticated :user, -> user { user.admin? } do
+    root 'admin_dashboard#index', as: :admin_dashboard
+  end
+
+  authenticated :user, -> user { user.project_manager? } do
+    root 'project_manager_dashboard#index', as: :project_manager_dashboard
+  end
+
+  authenticated :user, -> user { user.user? } do
+    root 'user_dashboard#index', as: :user_dashboard
+  end
+
+  root 'home#index'
+end
+10. Run Your Application
+Finally, start the Rails server:
+
+bash
+Copy code
+rails server
