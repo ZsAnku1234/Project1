@@ -427,3 +427,18 @@ Copy code
 Now, when you visit /users/sign_up, you should see a customized form with fields for the user's first name, last name, username, and role. After filling out the form and signing up, the user should be created with all the extra attributes saved in the database.
 
 This form will also apply the role-based access control once users log in, as we set up previously.
+
+
+
+
+
+
+module ApplicationHelper
+  def role_options_for_sign_up
+    if current_user&.admin?
+      User::ROLES.map { |role| [role.humanize, role] } # Show all roles to admins
+    else
+      User::ROLES.reject { |role| role == 'admin' }.map { |role| [role.humanize, role] } # Show only non-admin roles to others
+    end
+  end
+end
