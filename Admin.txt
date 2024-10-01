@@ -170,3 +170,62 @@ Only admins should be able to access the Manage Users page (/users), edit users,
 Regular users should be restricted from accessing the user management features.
 Conclusion
 Now, the admin can manage all users and assign roles. The admin can access the user list, edit user details, and assign roles like admin, project_manager, and user using the management interface you’ve built.
+
+
+
+
+
+
+
+
+def destroy
+    @user = User.find(params[:id])
+    if @user.destroy
+      redirect_to users_path, notice: "User deleted successfully."
+    else
+      redirect_to users_path, alert: "Unable to delete user."
+    end
+  end
+
+<%= link_to 'Delete', user_path(user), method: :delete, data: { confirm: 'Are you sure you want to delete this user?' }, class: "btn btn-danger" %>
+        </td>
+
+
+
+Rails.application.routes.draw do
+  devise_for :users
+
+  # Admin routes for managing users
+  resources :users, only: [:index, :edit, :update, :destroy]
+
+  authenticated :user, -> user { user.admin? } do
+    root 'admin_dashboard#index', as: :admin_dashboard
+  end
+
+  authenticated :user, -> user { user.project_manager? } do
+    root 'project_manager_dashboard#index', as: :project_manager_dashboard
+  end
+
+  authenticated :user, -> user { user.user? } do
+    root 'user_dashboard#index', as: :user_dashboard
+  end
+
+  root 'home#index'
+end
+
+
+
+
+
+# Delete a user
+def destroy
+  @user = User.find(params[:id])
+  
+  if @user == current_user
+    redirect_to users_path, alert: "You cannot delete your own account."
+  elsif @user.destroy
+    redirect_to users_path, notice: "User deleted successfully."
+  else
+    redirect_to users_path, alert: "Unable to delete user."
+  end
+end
