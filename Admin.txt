@@ -1,0 +1,172 @@
+1. Create a UsersController for Admin Management
+First, you'll need a UsersController to allow an admin to manage users. This controller will be responsible for listing users, editing them, and updating their roles.
+
+Generate the controller:
+
+bash
+Copy code
+rails generate controller Users index edit update
+2. Update the UsersController with Admin Access Control
+In app/controllers/users_controller.rb, add logic to ensure that only an admin can manage users:
+
+ruby
+Copy code
+class UsersController < ApplicationController
+  before_action :authenticate_user!
+  before_action :admin_only
+
+  # List all users
+  def index
+    @users = User.all
+  end
+
+  # Edit a user (assign role)
+  def edit
+    @user = User.find(params[:id])
+  end
+
+  # Update the user's role and other attributes
+  def update
+    @user = User.find(params[:id])
+    if @user.update(user_params)
+      redirect_to users_path, notice: "User updated successfully."
+    else
+      render :edit, alert: "Unable to update user."
+    end
+  end
+
+  private
+
+  # Restrict access to admin only
+  def admin_only
+    redirect_to(root_path, alert: "Access denied.") unless current_user.admin?
+  end
+
+  # Permit only the necessary parameters
+  def user_params
+    params.require(:user).permit(:first_name, :last_name, :username, :email, :role)
+  end
+end
+3. Create the Views for Managing Users
+Now, create the views to list, edit, and update users.
+
+app/views/users/index.html.erb (List all users):
+erb
+Copy code
+<h1>Manage Users</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>First Name</th>
+      <th>Last Name</th>
+      <th>Username</th>
+      <th>Email</th>
+      <th>Role</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @users.each do |user| %>
+      <tr>
+        <td><%= user.first_name %></td>
+        <td><%= user.last_name %></td>
+        <td><%= user.username %></td>
+        <td><%= user.email %></td>
+        <td><%= user.role.humanize %></td>
+        <td>
+          <%= link_to 'Edit', edit_user_path(user), class: "btn btn-primary" %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+app/views/users/edit.html.erb (Edit user and assign role):
+erb
+Copy code
+<h1>Edit User</h1>
+
+<%= form_for(@user) do |f| %>
+  <div class="field">
+    <%= f.label :first_name %><br>
+    <%= f.text_field :first_name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :last_name %><br>
+    <%= f.text_field :last_name %>
+  </div>
+
+  <div class="field">
+    <%= f.label :username %><br>
+    <%= f.text_field :username %>
+  </div>
+
+  <div class="field">
+    <%= f.label :email %><br>
+    <%= f.email_field :email %>
+  </div>
+
+  <div class="field">
+    <%= f.label :role %><br>
+    <%= f.select :role, User::ROLES.map { |role| [role.humanize, role] } %>
+  </div>
+
+  <div class="actions">
+    <%= f.submit "Update User", class: "btn btn-success" %>
+  </div>
+<% end %>
+
+<%= link_to 'Back', users_path, class: "btn btn-secondary" %>
+4. Add Routes for User Management
+Now, add the routes to manage users in config/routes.rb:
+
+ruby
+Copy code
+Rails.application.routes.draw do
+  devise_for :users
+  resources :users, only: [:index, :edit, :update]  # Admin routes for managing users
+
+  authenticated :user, -> user { user.admin? } do
+    root 'admin_dashboard#index', as: :admin_dashboard
+  end
+
+  authenticated :user, -> user { user.project_manager? } do
+    root 'project_manager_dashboard#index', as: :project_manager_dashboard
+  end
+
+  authenticated :user, -> user { user.user? } do
+    root 'user_dashboard#index', as: :user_dashboard
+  end
+
+  root 'home#index'
+end
+5. Set Up User Role Constants in the User Model
+Ensure your User model has predefined roles, and methods to check user roles:
+
+In app/models/user.rb:
+
+ruby
+Copy code
+class User < ApplicationRecord
+  ROLES = %w[admin project_manager user]
+
+  def admin?
+    role == 'admin'
+  end
+
+  def project_manager?
+    role == 'project_manager'
+  end
+
+  def user?
+    role == 'user'
+  end
+end
+6. Verify Role Permissions
+Finally, test the application:
+
+Only admins should be able to access the Manage Users page (/users), edit users, and assign roles.
+Regular users should be restricted from accessing the user management features.
+Conclusion
+Now, the admin can manage all users and assign roles. The admin can access the user list, edit user details, and assign roles like admin, project_manager, and user using the management interface you’ve built.
