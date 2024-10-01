@@ -255,3 +255,72 @@ Finally, start the Rails server:
 bash
 Copy code
 rails server
+
+
+
+
+
+
+
+
+. Create the HomeController
+The error you encountered ("Uninitialized constant HomeController") is because we referenced a HomeController in the routes.rb file, but we didn't create it.
+
+To fix this, let's generate the HomeController:
+
+bash
+Copy code
+rails generate controller Home index
+This will generate the necessary controller and view for the home page.
+
+2. Update the HomeController
+Open app/controllers/home_controller.rb and define an action for the index method:
+
+ruby
+Copy code
+class HomeController < ApplicationController
+  def index
+  end
+end
+Now create a simple view for the home#index action. In app/views/home/index.html.erb:
+
+erb
+Copy code
+<h1>Welcome to the Project Management App</h1>
+<p>Please log in to continue.</p>
+3. Fixing the Route Priority
+In Rails, routes are matched from top to bottom. If two routes could potentially match the same URL, the first route in the file will be used. Ensure that your route for the authenticated users' dashboards is correctly placed above the general root path. Here's an updated routes.rb example:
+
+ruby
+Copy code
+Rails.application.routes.draw do
+  devise_for :users
+  resources :users, only: [:index, :edit, :update]
+  resources :projects
+
+  # Authenticated routes for different roles
+  authenticated :user, -> user { user.admin? } do
+    root 'admin_dashboard#index', as: :admin_dashboard
+  end
+
+  authenticated :user, -> user { user.project_manager? } do
+    root 'project_manager_dashboard#index', as: :project_manager_dashboard
+  end
+
+  authenticated :user, -> user { user.user? } do
+    root 'user_dashboard#index', as: :user_dashboard
+  end
+
+  # Default root route for unauthenticated users
+  root 'home#index'
+end
+Explanation:
+The root 'home#index' will only be hit if the user is unauthenticated (or doesn't match any of the previous conditions).
+Authenticated routes for admin, project_manager, and user are placed above the general root route, so they get matched first if a user is logged in.
+4. Restart the Server
+Once you've made these changes, restart your Rails server:
+
+bash
+Copy code
+rails server
+
