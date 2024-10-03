@@ -1,0 +1,159 @@
+1. Allow Users to View Their Assigned Projects
+To allow users to view only the projects they are assigned to, modify the ProjectsController index action to filter projects based on the currently logged-in user.
+
+Update the ProjectsController:
+In app/controllers/projects_controller.rb:
+
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :set_project, only: [:show, :edit, :update]
+  before_action :authorize_project_access!, only: [:show, :edit, :update]
+
+  # Show all projects (for Admins, Project Managers, and Users)
+  def index
+    if current_user.admin?
+      @projects = Project.all
+    elsif current_user.project_manager?
+      @projects = Project.where(project_manager_id: current_user.id)
+    elsif current_user.user?
+      @projects = current_user.projects
+    end
+  end
+
+  # Show a single project (for Users and Project Managers)
+  def show
+    # Project details will be handled by the view
+  end
+
+  # Edit action only for Project Manager and Admin
+  def edit
+    redirect_to root_path, alert: "Access denied." unless current_user.project_manager? || current_user.admin?
+  end
+
+  # Update action for Project Managers or Admin
+  def update
+    if @project.update(project_params)
+      redirect_to @project, notice: "Project updated successfully."
+    else
+      render :edit, alert: "Unable to update project."
+    end
+  end
+
+  private
+
+  # Strong params for updating the project
+  def project_params
+    params.require(:project).permit(:name, :description)
+  end
+
+  # Set project for actions
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  # Ensure users can only access projects they are assigned to
+  def authorize_project_access!
+    unless current_user.admin? || current_user.project_manager? || @project.users.include?(current_user)
+      redirect_to root_path, alert: "Access denied."
+    end
+  end
+end
+2. Update Views for Users to View Assigned Projects
+Users should be able to see their assigned projects in the index view and view individual project details in the show view.
+
+Update app/views/projects/index.html.erb:
+erb
+Copy code
+<h1>Your Assigned Projects</h1>
+
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Description</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% @projects.each do |project| %>
+      <tr>
+        <td><%= project.name %></td>
+        <td><%= project.description %></td>
+        <td>
+          <%= link_to 'View', project_path(project), class: "btn btn-primary" %>
+          <% if current_user.project_manager? || current_user.admin? %>
+            <%= link_to 'Edit', edit_project_path(project), class: "btn btn-secondary" %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+Update app/views/projects/show.html.erb:
+erb
+Copy code
+<h1>Project Details</h1>
+
+<p><strong>Name:</strong> <%= @project.name %></p>
+<p><strong>Description:</strong> <%= @project.description %></p>
+
+<% if current_user.project_manager? || current_user.admin? %>
+  <%= link_to 'Edit Project', edit_project_path(@project), class: "btn btn-secondary" %>
+<% end %>
+
+<%= link_to 'Back to Projects', projects_path, class: "btn btn-secondary" %>
+3. Allow Users to Update Specific Fields (If Applicable)
+If you want users to update certain fields of the project (e.g., mark progress or leave comments), you can open specific fields for them in the update action, but only for fields that make sense for the user to update.
+
+For example, if users can leave a progress update, you can add a progress field to the project:
+
+Migration to Add Progress Field (optional):
+bash
+Copy code
+rails generate migration AddProgressToProjects progress:string
+rails db:migrate
+Update project_params to Allow User Updates:
+In ProjectsController:
+
+ruby
+Copy code
+def project_params
+  if current_user.project_manager? || current_user.admin?
+    params.require(:project).permit(:name, :description, :progress)
+  else
+    params.require(:project).permit(:progress)
+  end
+end
+Add Progress Field to the show.html.erb View (optional):
+erb
+Copy code
+<h2>Progress</h2>
+
+<% if current_user.user? %>
+  <%= form_for @project do |f| %>
+    <div class="field">
+      <%= f.label :progress %>
+      <%= f.text_field :progress %>
+    </div>
+    <div class="actions">
+      <%= f.submit "Update Progress", class: "btn btn-primary" %>
+    </div>
+  <% end %>
+<% else %>
+  <p><strong>Progress:</strong> <%= @project.progress %></p>
+<% end %>
+4. Routing for Project Views and Updates
+In config/routes.rb, make sure the routes for viewing and updating projects are properly set up:
+
+ruby
+Copy code
+resources :projects, only: [:index, :show, :edit, :update]
+Conclusion
+With these changes:
+
+Users can view only their assigned projects in the index view.
+Users can see project details and update certain fields (like progress) if necessary.
+Admins and Project Managers retain their full control over projects.
+This structure ensures that users can manage the projects they’re assigned to while maintaining role-based access control.
