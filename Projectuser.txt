@@ -157,3 +157,68 @@ Users can view only their assigned projects in the index view.
 Users can see project details and update certain fields (like progress) if necessary.
 Admins and Project Managers retain their full control over projects.
 This structure ensures that users can manage the projects they’re assigned to while maintaining role-based access control.
+
+
+
+
+
+
+
+. Check Your Migration for project_manager_id
+If you already generated the Project model, check if the migration for the projects table contains the project_manager_id column.
+
+Look for the migration file in db/migrate/ (the file name will contain a timestamp). Open it and ensure that there is a reference to project_manager_id.
+
+For example, the migration should look something like this:
+
+ruby
+Copy code
+class CreateProjects < ActiveRecord::Migration[6.1]
+  def change
+    create_table :projects do |t|
+      t.string :name
+      t.text :description
+      t.references :project_manager, foreign_key: { to_table: :users } # <-- Ensure this line exists
+      t.timestamps
+    end
+  end
+end
+2. Generate a New Migration (if the column is missing)
+If the project_manager_id column is missing, you need to generate a new migration to add this column to the projects table.
+
+Run this command to generate a new migration:
+
+bash
+Copy code
+rails generate migration AddProjectManagerToProjects project_manager:references
+This will create a new migration file. Open the newly generated migration file and confirm it looks like this:
+
+ruby
+Copy code
+class AddProjectManagerToProjects < ActiveRecord::Migration[6.1]
+  def change
+    add_reference :projects, :project_manager, foreign_key: { to_table: :users }
+  end
+end
+3. Run the Migration
+Once the migration is ready, apply the changes to the database by running:
+
+bash
+Copy code
+rails db:migrate
+This will update the schema and add the project_manager_id column to the projects table.
+
+4. Check the Schema
+After migrating, verify that the column was added by checking the schema.rb file in the db folder. It should now include:
+
+ruby
+Copy code
+create_table "projects", force: :cascade do |t|
+  t.string "name"
+  t.text "description"
+  t.bigint "project_manager_id"  # <-- Ensure this column exists
+  t.datetime "created_at", null: false
+  t.datetime "updated_at", null: false
+end
+Conclusion
+This process will fix the "No such column: project_manager_id" error by ensuring the project_manager_id column is correctly added to the projects table and the database schema is properly updated.
