@@ -1,0 +1,114 @@
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_user!, only: [:edit, :update, :destroy]
+
+  # List of projects based on user role
+  def index
+    if current_user.admin?
+      @projects = Project.all
+    elsif current_user.project_manager?
+      @projects = Project.where(project_manager_id: current_user.id)
+    else
+      @projects = current_user.projects # Projects assigned to the current user
+    end
+  end
+
+  # Show a specific project
+  def show
+  end
+
+  # Form for creating a new project (for Project Manager or Admin)
+  def new
+    @project = Project.new
+  end
+
+  # Create a new project (only for Project Manager or Admin)
+  def create
+    @project = current_user.managed_projects.build(project_params) # Assigns current user as project manager
+    if @project.save
+      redirect_to @project, notice: 'Project created successfully.'
+    else
+      render :new
+    end
+  end
+
+  # Form for editing a project (for Project Manager or Admin)
+  def edit
+  end
+
+  # Update a project (for Project Manager or Admin)
+  def update
+    if @project.update(project_params)
+      redirect_to @project, notice: 'Project updated successfully.'
+    else
+      render :edit
+    end
+  end
+
+  # Delete a project (only for Admin)
+  def destroy
+    if current_user.admin?
+      @project.destroy
+      redirect_to projects_path, notice: 'Project deleted successfully.'
+    else
+      redirect_to projects_path, alert: 'Only Admin can delete a project.'
+    end
+  end
+
+  private
+
+  # Strong params to permit only the allowed parameters
+  def project_params
+    params.require(:project).permit(:name, :description, :progress) # Add other fields as needed
+  end
+
+  # Set project for actions
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  # Ensure that only authorized users can edit or update the project
+  def authorize_user!
+    unless current_user.admin? || current_user.project_manager? && @project.project_manager_id == current_user.id
+      redirect_to projects_path, alert: 'You are not authorized to perform this action.'
+    end
+  end
+end
+
+
+
+
+
+
+
+
+
+class User < ApplicationRecord
+  has_many :managed_projects, class_name: 'Project', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :projects # If users are assigned to multiple projects
+end
+
+
+
+
+
+
+
+
+
+class Project < ApplicationRecord
+  belongs_to :project_manager, class_name: 'User', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :users
+end
+
+
+
+
+
+
+class AddProjectManagerToProjects < ActiveRecord::Migration[6.1]
+  def change
+    add_reference :projects, :project_manager, foreign_key: { to_table: :users }
+  end
+end
