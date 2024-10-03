@@ -1,0 +1,379 @@
+(app/models/project.rb)
+ruby
+Copy code
+class Project < ApplicationRecord
+  belongs_to :project_manager, class_name: 'User', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :users # If users are assigned to multiple projects
+
+  validates :name, presence: true
+  validates :description, presence: true
+end
+2. User Model (app/models/user.rb)
+Make sure you have a role column in the users table to manage roles like Admin, Project Manager, and User.
+
+ruby
+Copy code
+class User < ApplicationRecord
+  # Role definitions
+  enum role: { admin: 0, project_manager: 1, user: 2 }
+
+  has_many :managed_projects, class_name: 'Project', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :projects # Users who are assigned to multiple projects
+
+  # Validations
+  validates :first_name, :last_name, :username, presence: true
+end
+3. ProjectsController (app/controllers/projects_controller.rb)
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_user!, only: [:edit, :update, :destroy]
+
+  # List of projects based on user role
+  def index
+    if current_user.admin?
+      @projects = Project.all
+    elsif current_user.project_manager?
+      @projects = current_user.managed_projects # Projects managed by the project manager
+    else
+      @projects = current_user.projects # Projects assigned to the current user
+    end
+  end
+
+  # Show a specific project
+  def show
+  end
+
+  # Form for creating a new project (for Project Manager or Admin)
+  def new
+    @project = Project.new
+  end
+
+  # Create a new project (only for Project Manager or Admin)
+  def create
+    @project = current_user.managed_projects.build(project_params) # Assign the current user as the project manager
+    if @project.save
+      redirect_to @project, notice: 'Project was successfully created.'
+    else
+      render :new
+    end
+  end
+
+  # Form for editing a project (for Project Manager or Admin)
+  def edit
+  end
+
+  # Update a project (for Project Manager or Admin)
+  def update
+    if @project.update(project_params)
+      redirect_to @project, notice: 'Project was successfully updated.'
+    else
+      render :edit
+    end
+  end
+
+  # Delete a project (only for Admin)
+  def destroy
+    if current_user.admin?
+      @project.destroy
+      redirect_to projects_path, notice: 'Project was successfully deleted.'
+    else
+      redirect_to projects_path, alert: 'Only Admin can delete a project.'
+    end
+  end
+
+  private
+
+  # Strong params for creating/updating a project
+  def project_params
+    params.require(:project).permit(:name, :description)
+  end
+
+  # Set project for show, edit, update, and delete actions
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  # Authorization for project managers and admins
+  def authorize_user!
+    unless current_user.admin? || (current_user.project_manager? && @project.project_manager_id == current_user.id)
+      redirect_to projects_path, alert: 'You are not authorized to perform this action.'
+    end
+  end
+end
+4. Routes (config/routes.rb)
+Define the RESTful routes for projects.
+
+ruby
+Copy code
+Rails.application.routes.draw do
+  devise_for :users
+  resources :projects
+  root 'projects#index'
+end
+5. Views
+Here are basic views for listing, showing, creating, and editing projects.
+
+index.html.erb (List Projects)
+erb
+Copy code
+<h1>Projects</h1>
+
+<% if current_user.project_manager? || current_user.admin? %>
+  <%= link_to 'New Project', new_project_path %>
+<% end %>
+
+<ul>
+  <% @projects.each do |project| %>
+    <li>
+      <%= link_to project.name, project %>
+      <% if current_user.admin? || (current_user.project_manager? && project.project_manager_id == current_user.id) %>
+        <%= link_to 'Edit', edit_project_path(project) %> |
+        <%= link_to 'Delete', project, method: :delete, data: { confirm: 'Are you sure?' } %>
+      <% end %>
+    </li>
+  <% end %>
+</ul>
+show.html.erb (Show Project)
+erb
+Copy code
+<h1><%= @project.name %></h1>
+<p><%= @project.description %></p>
+
+<%= link_to 'Back to Projects', projects_path %>
+new.html.erb (New Project)
+erb
+Copy code
+<h1>New Project</h1>
+
+<%= form_with model: @project, local: true do |form| %>
+  <div>
+    <%= form.label :name %>
+    <%= form.text_field :name %>
+  </div>
+
+  <div>
+    <%= form.label :description %>
+    <%= form.text_area :description %>
+  </div>
+
+  <%= form.submit 'Create Project' %>
+<% end %>
+
+<%= link_to 'Back to Projects', projects_path %>
+edit.html.erb (Edit Project)
+erb
+Copy code
+<h1>Edit Project</h1>
+
+<%= form_with model: @project, local: true do |form| %>
+  <div>
+    <%= form.label :name %>
+    <%= form.text_field :name %>
+  </div>
+
+  <div>
+    <%= form.label :description %>
+    <%= form.text_area :description %>
+  </div>
+
+  <%= form.submit 'Update Project' %>
+<% end %>
+
+<%= link_to 'Back to Projects', projects_path %>
+6. Migrations
+You will need the following migrations to create the projects table and the many-to-many relationship between users and projects.
+
+Migration to Create Projects Table:
+ruby
+Copy code
+class CreateProjects < ActiveRecord::Migration[6.1]
+  def change
+    create_table :projects do |t|
+      t.string :name, null: false
+      t.text :description, null: false
+      t.references :project_manager, foreign_key: { to_table: :users }
+
+      t.timestamps
+    end
+  end
+end
+Migration to Create Users-Projects Join Table (for assignments):
+ruby
+Copy code
+class CreateUsersProjectsJoinTable < ActiveRecord::Migration[6.1]
+  def change
+    create_join_table :users, :projects do |t|
+      t.index :user_id
+      t.index :project_id
+    end
+  end
+end
+7. User Roles
+Ensure that the users table has a role column for managing roles (Admin, Project Manager, User). You can add this by generating a migration:
+
+bash
+Copy code
+rails generate migration AddRoleToUsers role:integer
+Then update the migration file:
+
+ruby
+Copy code
+class AddRoleToUsers < ActiveRecord::Migration[6.1]
+  def change
+    add_column :users, :role, :integer, default: 2 # Default to 'user'
+  end
+end
+Conclusion
+This complete code setup should handle:
+
+Admin users who can manage all projects.
+Project Managers who can create, manage, and assign projects.
+Users who can view and be assigned to projects.
+Make sure to run your migrations using rails db:migrate and check the functionality accordingly.
+
+
+
+
+
+
+You said:
+User can read that project 
+
+2/2
+
+ChatGPT said:
+ChatGPT
+To allow Users to read (view) the projects assigned to them, you need to modify a few things in your controller, model, and views. Below are the steps to ensure that Users can view projects they are assigned to.
+
+Update the ProjectsController
+In the ProjectsController, ensure that Users can only access projects they are assigned to. We already have this functionality in the index action, but we also need to make sure it works in the show action.
+
+Update the show action so that a regular user can only view the projects assigned to them:
+
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_user!, only: [:edit, :update, :destroy]
+
+  # List of projects based on user role
+  def index
+    if current_user.admin?
+      @projects = Project.all
+    elsif current_user.project_manager?
+      @projects = current_user.managed_projects
+    else
+      @projects = current_user.projects # Projects assigned to the current user
+    end
+  end
+
+  # Show a specific project
+  def show
+    if current_user.admin? || current_user.project_manager? || @project.users.include?(current_user)
+      # Allow access if the user is an admin, project manager, or assigned to the project
+    else
+      redirect_to projects_path, alert: 'You are not authorized to view this project.'
+    end
+  end
+
+  # Other actions like new, create, edit, update, destroy remain unchanged
+
+  private
+
+  # Strong params
+  def project_params
+    params.require(:project).permit(:name, :description)
+  end
+
+  # Set the project for actions
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  # Ensure only authorized users can edit, update, or destroy the project
+  def authorize_user!
+    unless current_user.admin? || (current_user.project_manager? && @project.project_manager_id == current_user.id)
+      redirect_to projects_path, alert: 'You are not authorized to perform this action.'
+    end
+  end
+end
+Modify the show.html.erb View
+In the show.html.erb view, make sure that the assigned users can see the project details.
+
+Example of show.html.erb:
+
+erb
+Copy code
+<h1><%= @project.name %></h1>
+<p><%= @project.description %></p>
+
+<% if current_user.admin? || current_user.project_manager? || @project.users.include?(current_user) %>
+  <p>Assigned users:</p>
+  <ul>
+    <% @project.users.each do |user| %>
+      <li><%= user.username %> (<%= user.role %>)</li>
+    <% end %>
+  </ul>
+
+  <%= link_to 'Back to Projects', projects_path %>
+
+  <% if current_user.admin? || (current_user.project_manager? && @project.project_manager_id == current_user.id) %>
+    <%= link_to 'Edit', edit_project_path(@project) %> |
+    <%= link_to 'Delete', @project, method: :delete, data: { confirm: 'Are you sure?' } %>
+  <% end %>
+<% else %>
+  <p>You are not authorized to view this project.</p>
+<% end %>
+This ensures that Users assigned to the project can view the project details, while others are blocked from accessing it.
+
+Update the User-Project Association in the Model
+Ensure that your User and Project models have the necessary associations so that users can be assigned to projects.
+
+User Model (app/models/user.rb):
+ruby
+Copy code
+class User < ApplicationRecord
+  has_many :managed_projects, class_name: 'Project', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :projects # Users assigned to projects
+
+  enum role: { admin: 0, project_manager: 1, user: 2 }
+
+  validates :first_name, :last_name, :username, presence: true
+end
+Project Model (app/models/project.rb):
+ruby
+Copy code
+class Project < ApplicationRecord
+  belongs_to :project_manager, class_name: 'User', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :users # Users assigned to this project
+
+  validates :name, :description, presence: true
+end
+Migration for users_projects Join Table
+Ensure that you have a join table between users and projects to manage the assignment of users to projects.
+
+Here’s a migration to create the join table between users and projects:
+
+ruby
+Copy code
+class CreateUsersProjectsJoinTable < ActiveRecord::Migration[6.1]
+  def change
+    create_join_table :users, :projects do |t|
+      t.index :user_id
+      t.index :project_id
+    end
+  end
+end
+This migration will create a join table users_projects that connects users to projects.
+
+Conclusion
+This full setup ensures that:
+
+Admins can view and manage all projects.
+Project Managers can create, edit, and manage their projects.
+Users can only view the projects they are assigned to.
+This gives you role-based control over who can view and manage each project.
