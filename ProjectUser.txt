@@ -742,3 +742,172 @@ _project.html.erb: Used in the index.html.erb to render individual projects in t
 These views will work together with the controller and model code to allow full CRUD functionality for projects, including creating, editing, viewing, and deleting projects, as well as assigning users via a drop-down in the form.
 
 Let me know if you need any further customization!
+
+
+
+
+
+
+
+
+User can show only their assigned project 
+ChatGPT said:
+ChatGPT
+To ensure that users can only view the projects they're assigned to, you need to adjust the index and show actions in the ProjectsController and update the view files accordingly.
+
+Here's how you can implement this step by step:
+
+1. Update the ProjectsController
+You will restrict the projects displayed to users so that they only see the ones they are assigned to. Admins will continue to see all projects, and project managers will see the ones they manage as well.
+
+In app/controllers/projects_controller.rb:
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_user!, only: [:edit, :update, :destroy]
+
+  def index
+    if current_user.admin?
+      @projects = Project.all
+    elsif current_user.project_manager?
+      @projects = current_user.managed_projects
+    else
+      @projects = current_user.projects # Only show projects assigned to the current user
+    end
+  end
+
+  def show
+    if !current_user.admin? && !@project.users.include?(current_user) && @project.project_manager_id != current_user.id
+      redirect_to projects_path, alert: 'You are not authorized to view this project.'
+    end
+  end
+
+  def new
+    @project = Project.new
+  end
+
+  def create
+    @project = current_user.managed_projects.build(project_params)
+    if @project.save
+      redirect_to @project, notice: 'Project was successfully created.'
+    else
+      render :new
+    end
+  end
+
+  def edit
+  end
+
+  def update
+    if @project.update(project_params)
+      redirect_to @project, notice: 'Project was successfully updated.'
+    else
+      render :edit
+    end
+  end
+
+  def destroy
+    @project.destroy
+    redirect_to projects_url, notice: 'Project was successfully deleted.'
+  end
+
+  private
+
+  def project_params
+    params.require(:project).permit(:name, :description, user_ids: [])
+  end
+
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  def authorize_user!
+    unless current_user.admin? || (current_user.project_manager? && @project.project_manager_id == current_user.id)
+      redirect_to projects_path, alert: 'You are not authorized to perform this action.'
+    end
+  end
+end
+Explanation:
+index:
+Admin users see all projects.
+Project Managers see only the projects they manage.
+Regular Users see only the projects they are assigned to (current_user.projects).
+show:
+Only admins, project managers of the specific project, or users assigned to the project can view the details. If an unauthorized user tries to access a project, they will be redirected to the project list with an alert.
+2. Update the index.html.erb View
+Now, we’ll display only the relevant projects in the index view based on the user’s role.
+
+In app/views/projects/index.html.erb:
+erb
+Copy code
+<h1>My Projects</h1>
+
+<% if current_user.project_manager? %>
+  <%= link_to 'New Project', new_project_path %>
+<% end %>
+
+<% if @projects.any? %>
+  <% @projects.each do |project| %>
+    <%= render 'project', project: project %>
+  <% end %>
+<% else %>
+  <p>You are not assigned to any projects.</p>
+<% end %>
+
+<%= link_to 'Back to Dashboard', root_path %>
+This view will only display the projects retrieved from the controller. For regular users, only their assigned projects will be shown.
+3. Update the show.html.erb View
+The show view will remain largely the same, but since access is controlled in the controller, you don’t need to worry about unauthorized access here.
+
+In app/views/projects/show.html.erb:
+erb
+Copy code
+<h1><%= @project.name %></h1>
+
+<p>
+  <strong>Description:</strong>
+  <%= @project.description %>
+</p>
+
+<p>
+  <strong>Project Manager:</strong>
+  <%= @project.project_manager.username %>
+</p>
+
+<% if @project.users.any? %>
+  <p>
+    <strong>Assigned Users:</strong>
+    <%= @project.users.map(&:username).join(", ") %>
+  </p>
+<% end %>
+
+<%= link_to 'Edit', edit_project_path(@project) if current_user.admin? || current_user.project_manager? %>
+<%= link_to 'Back', projects_path %>
+4. Test the Changes
+Log in as a regular user:
+
+You should only see the projects you are assigned to.
+Attempting to view a project you're not assigned to should redirect you with an authorization error.
+Log in as a project manager:
+
+You should see only the projects you manage.
+You should be able to create, edit, and manage the projects you manage.
+Log in as an admin:
+
+You should see all projects.
+You should be able to view, edit, and delete any project.
+Conclusion
+With these changes, users will only be able to see and access projects they are directly assigned to, while project managers can view and manage the projects they oversee. Admins will continue to have access to everything.
+
+
+
+
+
+
+
+
+
+
+ChatGPT can make mistakes. Check important
