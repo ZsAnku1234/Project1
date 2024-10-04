@@ -602,3 +602,143 @@ project = Project.last
 project.users  # Should show the assigned users
 Conclusion
 With these steps, you have a full implementation that allows project managers to create projects, enter the project name and description, and assign users via a multi-select drop-down. Each component (models, controller, views, and migrations) has been updated to support this functionality.
+
+
+
+
+
+
+
+
+
+. _form.html.erb (Form Partial)
+This form is used for both creating and editing projects.
+
+In app/views/projects/_form.html.erb:
+erb
+Copy code
+<%= form_with(model: project, local: true) do |form| %>
+  <% if project.errors.any? %>
+    <div id="error_explanation">
+      <h2><%= pluralize(project.errors.count, "error") %> prohibited this project from being saved:</h2>
+
+      <ul>
+        <% project.errors.full_messages.each do |message| %>
+          <li><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <div class="field">
+    <%= form.label :name, "Project Name" %>
+    <%= form.text_field :name %>
+  </div>
+
+  <div class="field">
+    <%= form.label :description, "Project Description" %>
+    <%= form.text_area :description %>
+  </div>
+
+  <div class="field">
+    <%= form.label :user_ids, "Assign Users" %>
+    <%= form.collection_select :user_ids, User.all, :id, :username, {}, { multiple: true } %>
+    <!-- Allows selecting multiple users to assign to the project -->
+  </div>
+
+  <div class="actions">
+    <%= form.submit %>
+  </div>
+<% end %>
+2. _project.html.erb (Project Partial)
+This partial can be used to display each project in lists, such as in the index or within other views.
+
+In app/views/projects/_project.html.erb:
+erb
+Copy code
+<div class="project">
+  <h3><%= link_to project.name, project_path(project) %></h3>
+  <p><%= truncate(project.description, length: 100) %></p>
+  <p><strong>Project Manager:</strong> <%= project.project_manager.username %></p>
+
+  <% if project.users.any? %>
+    <p><strong>Assigned Users:</strong> 
+      <%= project.users.map(&:username).join(", ") %>
+    </p>
+  <% end %>
+
+  <% if current_user.admin? || (current_user.project_manager? && project.project_manager_id == current_user.id) %>
+    <%= link_to 'Edit', edit_project_path(project) %> |
+    <%= link_to 'Delete', project, method: :delete, data: { confirm: 'Are you sure?' } %>
+  <% end %>
+</div>
+3. new.html.erb (New Project)
+This view is used to create a new project. It uses the form partial _form.html.erb.
+
+In app/views/projects/new.html.erb:
+erb
+Copy code
+<h1>New Project</h1>
+
+<%= render 'form', project: @project %>
+
+<%= link_to 'Back', projects_path %>
+4. edit.html.erb (Edit Project)
+This view is used to edit an existing project. Like the new view, it also uses the form partial _form.html.erb.
+
+In app/views/projects/edit.html.erb:
+erb
+Copy code
+<h1>Edit Project</h1>
+
+<%= render 'form', project: @project %>
+
+<%= link_to 'Back', project_path(@project) %>
+5. show.html.erb (Show Project)
+This view displays detailed information about a single project.
+
+In app/views/projects/show.html.erb:
+erb
+Copy code
+<h1><%= @project.name %></h1>
+
+<p>
+  <strong>Description:</strong>
+  <%= @project.description %>
+</p>
+
+<p>
+  <strong>Project Manager:</strong>
+  <%= @project.project_manager.username %>
+</p>
+
+<% if @project.users.any? %>
+  <p>
+    <strong>Assigned Users:</strong>
+    <%= @project.users.map(&:username).join(", ") %>
+  </p>
+<% end %>
+
+<%= link_to 'Edit', edit_project_path(@project) if current_user.admin? || current_user.project_manager? %>
+<%= link_to 'Back', projects_path %>
+6. index.html.erb (Project List)
+This view lists all the projects. It uses the _project.html.erb partial to render each project.
+
+In app/views/projects/index.html.erb:
+erb
+Copy code
+<h1>Projects</h1>
+
+<%= link_to 'New Project', new_project_path if current_user.project_manager? %>
+
+<% @projects.each do |project| %>
+  <%= render 'project', project: project %>
+<% end %>
+
+<%= link_to 'Back to Dashboard', root_path %>
+Additional Notes:
+_form.html.erb: Used in both the new.html.erb and edit.html.erb views.
+_project.html.erb: Used in the index.html.erb to render individual projects in the list.
+These views will work together with the controller and model code to allow full CRUD functionality for projects, including creating, editing, viewing, and deleting projects, as well as assigning users via a drop-down in the form.
+
+Let me know if you need any further customization!
