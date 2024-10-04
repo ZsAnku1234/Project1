@@ -1,0 +1,156 @@
+To implement a system where a manager can create projects and assign them to users, and users can only see the projects assigned to them, you would typically set up your project with models, controllers, and views in a way that enforces these rules. Here's an outline of how you can do it in a Rails application:
+
+Models
+User: Represents the user (managers and normal users).
+Project: Represents the project created by the manager.
+Assignment: A join model that ties users to projects (many-to-many relationship).
+Migration files:
+User Model (users table): Add role to distinguish between managers and users.
+ruby
+Copy code
+rails generate migration AddRoleToUsers role:string
+Project Model (projects table): Add basic information about projects.
+ruby
+Copy code
+rails generate model Project name:string description:text manager_id:integer
+Assignment Model (assignments table): Create a join table to assign projects to users.
+ruby
+Copy code
+rails generate model Assignment user_id:integer project_id:integer
+Run the migrations after creating them:
+
+bash
+Copy code
+rails db:migrate
+Models Setup
+User Model (user.rb)
+ruby
+Copy code
+class User < ApplicationRecord
+  has_many :assignments
+  has_many :projects, through: :assignments
+
+  # Distinguishing between manager and normal users
+  def manager?
+    role == 'manager'
+  end
+end
+Project Model (project.rb)
+ruby
+Copy code
+class Project < ApplicationRecord
+  belongs_to :manager, class_name: 'User', foreign_key: 'manager_id'
+  has_many :assignments
+  has_many :users, through: :assignments
+end
+Assignment Model (assignment.rb)
+ruby
+Copy code
+class Assignment < ApplicationRecord
+  belongs_to :user
+  belongs_to :project
+end
+Controllers
+Projects Controller
+Manager's Controller: projects_controller.rb - for managers to create and assign projects.
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+
+  # Managers create projects and assign to users
+  def new
+    @project = Project.new
+    @users = User.where(role: 'user')
+  end
+
+  def create
+    @project = current_user.projects.build(project_params)
+    
+    if @project.save
+      # Assign users to the project based on the selection
+      @project.user_ids = params[:project][:user_ids]
+      redirect_to @project, notice: 'Project created and assigned successfully.'
+    else
+      render :new
+    end
+  end
+
+  private
+
+  def project_params
+    params.require(:project).permit(:name, :description, user_ids: [])
+  end
+end
+Users' View Controller: assigned_projects_controller.rb - for users to view only their assigned projects.
+ruby
+Copy code
+class AssignedProjectsController < ApplicationController
+  before_action :authenticate_user!
+
+  def index
+    # User can only see their assigned projects
+    @projects = current_user.projects
+  end
+end
+Views
+New Project Form (For Managers)
+Create a form that allows the manager to create a new project and assign it to users:
+
+erb
+Copy code
+<!-- app/views/projects/new.html.erb -->
+<h1>Create New Project</h1>
+
+<%= form_with(model: @project, local: true) do |form| %>
+  <%= form.label :name %>
+  <%= form.text_field :name %>
+
+  <%= form.label :description %>
+  <%= form.text_area :description %>
+
+  <%= form.label :users %><br>
+  <%= form.collection_check_boxes :user_ids, @users, :id, :email %>
+
+  <%= form.submit 'Create Project' %>
+<% end %>
+Assigned Projects (For Users)
+Create a view that allows users to see only the projects that are assigned to them:
+
+erb
+Copy code
+<!-- app/views/assigned_projects/index.html.erb -->
+<h1>Your Assigned Projects</h1>
+
+<% if @projects.any? %>
+  <ul>
+    <% @projects.each do |project| %>
+      <li><%= project.name %> - <%= project.description %></li>
+    <% end %>
+  </ul>
+<% else %>
+  <p>No projects assigned to you yet.</p>
+<% end %>
+Routes
+In config/routes.rb, define the routes for managing projects and viewing assigned projects:
+
+ruby
+Copy code
+Rails.application.routes.draw do
+  devise_for :users
+  
+  # Manager routes
+  resources :projects, only: [:new, :create, :show]
+  
+  # User routes
+  resources :assigned_projects, only: [:index]
+  
+  root to: 'assigned_projects#index'  # Users are redirected to their assigned projects by default
+end
+Authentication & Authorization
+Ensure you use a tool like Devise for user authentication. You can check the current_user and its role to enforce role-based access control.
+
+Manager: Only a manager should be able to create projects.
+User: Users should only see projects that they are assigned to.
+Conclusion
+With this structure, managers will be able to create and assign projects, and users will only see the projects they are assigned to.
