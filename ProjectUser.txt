@@ -124,3 +124,109 @@ The Undefined method projects error was caused by the absence of a proper has_an
 
 
 
+
+
+
+
+
+
+
+The error No such column: projects.project_manager_id indicates that the project_manager_id column is missing from your projects table. This column is necessary to assign a project to a specific project manager (a user with the role of project_manager).
+
+To fix this issue, follow these steps:
+
+1. Create a migration to add the project_manager_id column
+You need to add a project_manager_id column to the projects table, which will reference the users table.
+
+Generate the migration:
+bash
+Copy code
+rails generate migration AddProjectManagerToProjects project_manager_id:integer
+This will generate a migration file in the db/migrate folder.
+
+Edit the migration file to add a foreign key constraint:
+ruby
+Copy code
+class AddProjectManagerToProjects < ActiveRecord::Migration[6.1]
+  def change
+    add_column :projects, :project_manager_id, :integer
+    add_foreign_key :projects, :users, column: :project_manager_id
+    add_index :projects, :project_manager_id
+  end
+end
+This migration does the following:
+
+Adds the project_manager_id column to the projects table.
+Adds a foreign key constraint, ensuring that the project_manager_id references a valid user in the users table.
+Adds an index on project_manager_id to speed up lookups.
+Run the migration:
+bash
+Copy code
+rails db:migrate
+This will add the project_manager_id column to the projects table.
+
+2. Update the Project Model
+Ensure that the Project model is set up to correctly reference the project_manager (a user).
+
+Update the app/models/project.rb:
+ruby
+Copy code
+class Project < ApplicationRecord
+  belongs_to :project_manager, class_name: 'User', foreign_key: 'project_manager_id'
+  has_and_belongs_to_many :users  # Users assigned to the project
+
+  validates :name, :description, presence: true
+end
+This establishes the relationship between the Project and the User who manages it.
+
+3. Assign Project Manager When Creating a Project
+When creating a project, you need to ensure that the current user (if they are a project manager) is set as the project_manager_id.
+
+Update the ProjectsController (app/controllers/projects_controller.rb):
+ruby
+Copy code
+class ProjectsController < ApplicationController
+  before_action :authenticate_user!
+  before_action :set_project, only: [:show, :edit, :update, :destroy]
+  before_action :authorize_user!, only: [:edit, :update, :destroy]
+
+  def create
+    @project = current_user.managed_projects.build(project_params) # Set the current user as the project manager
+    if @project.save
+      redirect_to @project, notice: 'Project was successfully created.'
+    else
+      render :new
+    end
+  end
+
+  # Other actions (index, show, edit, etc.) remain unchanged
+
+  private
+
+  def project_params
+    params.require(:project).permit(:name, :description)
+  end
+
+  def set_project
+    @project = Project.find(params[:id])
+  end
+
+  def authorize_user!
+    unless current_user.admin? || (current_user.project_manager? && @project.project_manager_id == current_user.id)
+      redirect_to projects_path, alert: 'You are not authorized to perform this action.'
+    end
+  end
+end
+4. Test the Setup
+After adding the project_manager_id column and making sure your model relationships and controller actions are correctly set up, you can test the following:
+
+Create a Project: When a user with the project_manager role creates a project, they should be automatically set as the project_manager.
+
+View a Project: Both the project manager and assigned users should be able to view the project.
+
+Check the Database: You should see the project_manager_id field populated with the correct user ID for the project manager.
+
+Conclusion
+By running the migration and updating your models and controller, you will resolve the No such column: projects.project_manager_id error. This ensures that a project is properly associated with a project manager via the
+
+
